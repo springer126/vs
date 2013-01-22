@@ -163,6 +163,8 @@ protected slots:
 
    void EnableVisible();
 
+   void addActorNode(vtkActor *actor,QString str,mitk::Color color);
+
    
 };
 #endif 

@@ -11,6 +11,7 @@
 #include <mitkPointSet.h>
 #include "mitkImageAccessByItk.h"
 #include "mitkITKImageImport.h"
+#include "mitkPointSet.h"
 #include "itkImageRegionIterator.h"
 #include "itkImageDuplicator.h"
 #include "itkNeighborhoodIterator.h"
@@ -25,10 +26,22 @@
 #include <limits>
 #include <math.h>
 #include <stack>
+#include <fstream>
+#include <time.h>
+#include <algorithm>
 
 using namespace boost;
 typedef boost::property_map<Graph, vertex_index_t>::type TVertexIndex;
 typedef boost::property_map<Graph, edge_index_t>::type TEdgeIndex;
+
+int id;
+bool isCls(int cls)
+{
+	if(cls==id)
+		return true;
+	else
+		return false;
+};
 
 template <class Graph> 
 struct exercise_vertex
@@ -214,7 +227,7 @@ void VesselGraph::CreateSubGraph(Vertex& v)
 		}
 	}
 
-	mitk::PointSet::Pointer points = mitk::PointSet::New();
+	/*mitk::PointSet::Pointer points = mitk::PointSet::New();
 	int index = 0;
 	std::cout <<"No."<<subGraphCount<<" SubGraph ,Vertex Number: " <<QDiVertex[subGraphCount].size()<< std::endl;
 	for (v_i=QDiVertex[subGraphCount].begin();v_i!=QDiVertex[subGraphCount].end();++v_i)
@@ -241,7 +254,7 @@ void VesselGraph::CreateSubGraph(Vertex& v)
 	pNode->SetProperty("color", mitk::ColorProperty::New(color.GetRed(),color.GetGreen(),color.GetBlue()));
 	pNode->SetProperty("pointsize", mitk::FloatProperty::New(1));
 	mitk::DataStorage::GetInstance()->Add( pNode );
-	mitk::RenderingManager::GetInstance()->RequestUpdateAll();
+	mitk::RenderingManager::GetInstance()->RequestUpdateAll();*/
 }
 
 
@@ -545,18 +558,18 @@ void VesselGraph::OutputGraph()
 	std::cout <<"==============Graph============="<< std::endl;
 }
 
-unsigned int VesselGraph::GetVertexIndex(Vertex v) const 
+int VesselGraph::GetVertexIndex(Vertex v) const 
 {
 	TVertexIndex vertexIndexMap = get(vertex_index,g);
 	return vertexIndexMap[v];
 }
 
-unsigned int VesselGraph::GetEdgeSourceIndex(Edge e) const 
+int VesselGraph::GetEdgeSourceIndex(Edge e) const 
 {
 	 return GetVertexIndex(source(e,g));
 }
 
-unsigned int VesselGraph::GetEdgeTargetIndex(Edge e) const
+int VesselGraph::GetEdgeTargetIndex(Edge e) const
 {
 	return GetVertexIndex(target(e,g));
 }
@@ -568,6 +581,8 @@ void VesselGraph::RadiusFilter(double threshold)
 	TVertexIndex vertexIndexMap = get(vertex_index,g);
 	std::vector<Edge>::iterator i_beg;
 	std::vector<Vertex>::iterator i_beg2;
+	QDiVertex[1].clear();
+	//erase edge whose radius more than threshold and its source vertex
 	for (i_beg = es.begin();i_beg!=es.end();i_beg++)
 	{
 		if(edgeMrMap[*i_beg]>threshold)
@@ -576,6 +591,7 @@ void VesselGraph::RadiusFilter(double threshold)
 			{
 				if(vertexIndexMap[*i_beg2] ==source(*i_beg,g))
 				{
+					QDiVertex[1].push_back(*i_beg2);
 					vs.erase(i_beg2);
 					break;
 				}
@@ -584,9 +600,357 @@ void VesselGraph::RadiusFilter(double threshold)
 		}
 	}
 
+
+	//erase isolate vertex
+	/*
+	for (i_beg2 = vs.begin();i_beg2!=vs.end();i_beg2++)
+	{
+		InEdgeIterator in_iter_beg,in_iter_end;
+
+		for(boost::tie(in_iter_beg,in_iter_end) = in_edges((*i_beg2,g)),in_iter_beg!=in_iter_end;in_iter_beg++)
+		{
+			for (i_beg = es.begin();i_beg!=es.end();i_beg++)
+			{
+				if()
+			}
+		} 
+		if(in_edges(*i_beg2,g).first == in_edges(*i_beg2,g).second && 
+			out_edges(*i_beg2,g).first == out_edges(*i_beg2,g).second)
+		{
+			std::cout << "Erase a Vertex." << std::endl;
+			vs.erase(i_beg2);
+		}
+	}
+	*/
+	
+
 	std::cout <<"Vertex Number :" << vs.size()<<" , Edge Number:" << es.size() << std::endl;
+	ofstream out_file("D:\\vertex.scale",fstream::app);
+	for (i_beg2 = vs.begin();i_beg2!=vs.end();i_beg2++)
+	{
+		out_file << txMap[*i_beg2]<<","<<tyMap[*i_beg2]<< "," << tzMap[*i_beg2]<<std::endl;
+	}
+
 	for (i_beg = es.begin();i_beg!=es.end();i_beg++)
 	{
 		std::cout << "("<<source(*i_beg,g)<<","<<target(*i_beg,g)<<")"<<std::endl;
 	}
+}
+
+// K-means to classify nodes of vascular
+double VesselGraph::KMeans(unsigned int clsNumber,double theta)
+{
+	assert(clsNumber>0 && theta>0);
+	
+	int size = vs.size();
+	//find seeds
+	Vertex *seeds = new Vertex[clsNumber];
+	double sum,*d = new double[size];
+	seeds[0] = vs.at(rand()%size);
+	
+	for (int n_cluster = 1;n_cluster<clsNumber;n_cluster++)
+	{
+		sum = 0;
+		for (int i = 0;i<size;i++)
+		{
+			float dis = FLT_MAX;
+			for (int j=0;j<n_cluster;j++)
+			{
+				//std::cout << "Cluster index:" << n_cluster << ",Vertex index:" << i << "Current Cluster index:" << j << std::endl;
+				float temp = sqrt(pow(txMap[seeds[j]]-txMap[vs.at(i)],2)
+					+pow(tyMap[seeds[j]]-tyMap[vs.at(i)],2)+pow(tzMap[seeds[j]]-tzMap[vs.at(i)],2));
+				if(temp<dis)
+				{
+					dis = temp;
+				}
+			}
+			d[i] = dis; 
+			sum += dis;
+		}
+
+		sum = sum*rand()/(RAND_MAX-1);
+		for (int k=0;k<size;k++)
+		{
+			if((sum-=d[k])>=0)continue;
+			seeds[n_cluster] = vs.at(k);
+			break;
+		}
+	}
+
+	int iter = 0;
+	double **centerPosition = new double*[clsNumber] ,**curPosition = new double*[clsNumber];
+	
+	for (int i=0;i<clsNumber;i++)
+	{
+		centerPosition[i]= new double[3];
+		curPosition[i] = new double[3];
+	}
+	double scope[3][2];
+	scope[0][0] = scope[0][1] = txMap[vs.at(0)];
+	scope[1][0] = scope[1][1] = tyMap[vs.at(0)];
+	scope[2][0] = scope[2][1] = tzMap[vs.at(0)];
+	int *cls = new int[vs.size()];
+	std::vector<Vertex>::iterator i_beg;
+	
+	//memset(centerPosition,0,sizeof(centerPosition));
+	for (i_beg = vs.begin();i_beg!=vs.end();i_beg++)
+	{
+		if(txMap[*i_beg]>scope[0][0])
+			scope[0][0] = txMap[*i_beg];
+		if(txMap[*i_beg]<scope[0][1])
+			scope[0][1] = txMap[*i_beg];
+		if(tyMap[*i_beg]>scope[1][0])
+			scope[1][0] = tyMap[*i_beg];
+		if(tyMap[*i_beg]<scope[1][1])
+			scope[1][1] = tyMap[*i_beg];
+		if(tzMap[*i_beg]>scope[2][0])
+			scope[2][0] = tzMap[*i_beg];
+		if(tzMap[*i_beg]<scope[2][1])
+			scope[2][1] = tzMap[*i_beg];
+	}
+	/*std::cout << scope[0][0]<<" "<< scope[0][1]<< " "<<scope[1][0]<< 
+		" "<<scope[1][1]<<" "<< scope[2][0]<<" "<< scope[2][1]<<std::endl;*/
+	/*srand( (unsigned)time( NULL ) );
+	double ratio;
+	for (int k=0;k<clsNumber;k++)
+	{
+	    ratio = ((k+0.0)/clsNumber)*((rand()%10)/10.0)+0.1;
+		std::cout << "Ratio:" << ratio << std::endl; 
+		*(*(centerPosition+k)+0) = ratio*(scope[0][0]-scope[0][1])+scope[0][1];
+		*(*(centerPosition+k)+1) = ratio*(scope[1][0]-scope[1][1])+scope[1][1];
+		*(*(centerPosition+k)+2) = ratio*(scope[2][0]-scope[2][1])+scope[2][1];
+	}*/
+	
+	double ratio[8][3] = {1/4.0,1/4.0,1/4.0, 1/4.0,3/4.0,1/4.0, 3/4.0,1/4.0,1/4.0, 3/4.0,3/4.0,1/4.0,
+				1/4.0,1/4.0,3/4.0, 3/4.0,1/4.0,3/4.0,1/4.0,3/4.0,3/4.0, 3/4.0,3/4.0,3/4.0};
+	
+	//for (int i=0;i<clsNumber;i++)
+	//{
+	//	centerPosition[i][0] = scope[0][1]+(scope[0][0]-scope[0][1])*ratio[i][0];
+	//	centerPosition[i][1] = scope[1][1]+(scope[1][0]-scope[1][1])*ratio[i][1];
+	//	centerPosition[i][2] = scope[2][1]+(scope[2][0]-scope[2][1])*ratio[i][2];
+	//}
+	std::cout << "Center Positions:";
+	for (int i=0;i<clsNumber;i++)
+	{
+		centerPosition[i][0] = txMap[seeds[i]];
+		centerPosition[i][1] = tyMap[seeds[i]];
+		centerPosition[i][2] = tzMap[seeds[i]];
+		std::cout << txMap[seeds[i]]<<tyMap[seeds[i]]<<tzMap[seeds[i]]<<std::endl;
+	}
+	
+	double thresh = 10;
+	int number = 0;
+	
+	mitk::Point3D point3D;
+	mitk::PointSet::Pointer OriginSeeds = mitk::PointSet::New();
+	for (int i = 0;i<clsNumber;i++)
+	{
+		point3D[0] = centerPosition[i][0];
+		point3D[1] = centerPosition[i][1];
+		point3D[2] = centerPosition[i][2];
+		OriginSeeds->GetPointSet()->GetPoints()->InsertElement( i, point3D );
+	}
+	mitk::DataTreeNode::Pointer pNode = mitk::DataTreeNode::New();
+	pNode->SetData( OriginSeeds );
+	char name[20];
+	sprintf(name,"%d Seeds",clsNumber);
+	pNode->SetProperty("name", mitk::StringProperty::New(name));
+	pNode->SetProperty("layer", mitk::IntProperty::New(1));
+	pNode->SetProperty("color", mitk::ColorProperty::New(1.0,0.0,0.0));
+	pNode->SetProperty("pointsize", mitk::FloatProperty::New(2));
+	mitk::DataStorage::GetInstance()->Add( pNode );
+	mitk::RenderingManager::GetInstance()->RequestUpdateAll();
+
+
+
+	while (thresh>theta)
+	{
+		iter++;
+		/*for (int k=0;k<clsNumber;k++)
+		{
+			std::cout << centerPosition[k][0]<<","<< centerPosition[k][1]<<","<< centerPosition[k][2]<<std::endl;
+		}*/
+
+		for (int index = 0;index<vs.size();index++)
+		{
+			float distance = FLT_MAX,tmp;
+			double xcoord = txMap[vs.at(index)],ycoord = tyMap[vs.at(index)],zorord = tzMap[vs.at(index)];
+			for (int i = 0;i<clsNumber;i++)
+			{
+				tmp = sqrt(pow(xcoord-centerPosition[i][0],2)+
+					pow(ycoord-centerPosition[i][1],2)+pow(zorord-centerPosition[i][2],2));
+				if(tmp<distance)
+				{
+					distance = tmp;
+					cls[index] = i; 
+				}
+			}
+		}
+		
+		for (int i = 0;i<clsNumber;i++)
+		{
+			for (int j = 0;j<3;j++)
+			{
+				curPosition[i][j] = 0;
+			}
+		}
+		//memset(curPosition,0,sizeof(curPosition));
+		for (int i=0;i<vs.size();i++)
+		{
+			curPosition[cls[i]][0]+=txMap[vs.at(i)];
+			curPosition[cls[i]][1]+=tyMap[vs.at(i)];
+			curPosition[cls[i]][2]+=tzMap[vs.at(i)];
+		}
+
+		for (int i = 0;i<clsNumber;i++)
+		{
+			id = i;
+			number = std::count_if(cls,cls+vs.size(),isCls);
+			if(number>0)
+			{
+				curPosition[i][0] /= number;
+				curPosition[i][1] /= number;
+				curPosition[i][2] /= number;		
+			}
+			std::cout << i+1<<" Classes: " << number<<std::endl;
+		}
+		
+		thresh = 0;
+		for (int i = 0;i<clsNumber;i++)
+		{
+			thresh += abs(curPosition[i][0]-centerPosition[i][0]);
+			thresh += abs(curPosition[i][1]-centerPosition[i][1]);
+			thresh += abs(curPosition[i][2]-centerPosition[i][2]);
+		}
+		
+		for (int i = 0;i<clsNumber;i++)
+		{
+			for (int j = 0;j<3;j++)
+			{
+				centerPosition[i][j] = curPosition[i][j];
+			}
+		}
+		//memcpy(centerPosition,curPosition,sizeof(centerPosition));
+	}
+
+	std::cout << iter << " iterations." << std::endl;
+	if(subGraphCount>1)
+	{
+		for (int i = 2;i<=subGraphCount;i++)
+		{
+			QDiVertex[i].clear();
+		}
+	}
+	subGraphCount = 1;
+	sum = 0;
+	for (int i = 0;i<clsNumber;i++)
+	{
+		id = i;
+		subGraphCount++;
+		number = std::count_if(cls,cls+vs.size(),isCls);
+		std::cout << i+1<<" Classes: " <<number <<std::endl;
+		if(number>0)
+		{
+			for (int j = 0;j<vs.size();j++)
+			{
+				if(cls[j]==id)
+				{
+					QDiVertex[subGraphCount].push_back(vs.at(j));
+					sum+= pow(txMap[vs.at(j)]-centerPosition[i][0],2)+pow(tyMap[vs.at(j)]-centerPosition[i][1],2)+pow(tzMap[vs.at(j)]-centerPosition[i][2],2);
+				}
+			}
+			
+		}
+	}
+	
+	sum = sqrt(sum);
+
+	delete[] seeds;
+	delete[] d;
+	delete[] cls;
+	for (int i = 0;i<clsNumber;i++)
+	{
+		delete[] centerPosition[i];
+		delete[] curPosition[i];
+	}
+	delete[] centerPosition;
+	delete[] curPosition;
+	
+	return sum;
+}
+
+int VesselGraph::GetOutDegree(const Vertex &v) const
+{
+	int number = 0;
+	GraphTraits::adjacency_iterator beg,end;
+	for (boost::tie(beg,end) = adjacent_vertices(v,g);beg!=end;beg++)
+	{
+		number++;
+	}
+	return number;
+}
+
+
+//set vertex order using strahler number
+void VesselGraph::SetVertexOrder()
+{
+	if(vertexOrder.size()!=0)
+		vertexOrder.clear();
+	
+	TVertexIndex vertexIndexMap = get(vertex_index,g);
+	VertexIterator v_beg,v_end;
+	EdgeIterator e_beg,e_end;
+	bool isFinish = false;
+	while(!isFinish)
+	{
+		isFinish = true;
+		for (boost::tie(v_beg,v_end) = vertices(g);v_beg!=v_end;v_beg++)
+		{
+			if(vertexOrder.find(*v_beg)==vertexOrder.end())
+			{
+				isFinish = false;
+				if(GetOutDegree(*v_beg)==0)
+					vertexOrder.insert(std::make_pair(vertexIndexMap[*v_beg],1));
+				else
+				{
+					GraphTraits::adjacency_iterator beg,end;
+					int minOder = INT_MAX,maxOrder = INT_MIN;
+					boost::tie(beg,end) = adjacent_vertices(*v_beg,g);
+					for (;beg!=end;beg++)
+					{
+						if(vertexOrder.find(*beg)==vertexOrder.end())
+							break;
+						else
+						{
+							if(vertexOrder[*beg]<minOder)
+								minOder = vertexOrder[*beg];
+							if(vertexOrder[*beg]>maxOrder)
+								maxOrder = vertexOrder[*beg];
+						}
+					}
+
+					if(beg == end)
+					{
+						if(minOder==maxOrder)
+						{
+							vertexOrder.insert(std::make_pair(vertexIndexMap[*v_beg],maxOrder+1));
+						}
+						else
+						{
+							vertexOrder.insert(std::make_pair(vertexIndexMap[*v_beg],maxOrder));
+						}
+					}
+				}
+			}
+		}
+
+	}
+
+
+	for (boost::tie(v_beg,v_end) = vertices(g);v_beg!=v_end;v_beg++)
+	{
+		std::cout <<"Index: " <<vertexIndexMap[*v_beg]<<" , "<<vertexOrder[*v_beg]<<std::endl;
+	}
+	
 }

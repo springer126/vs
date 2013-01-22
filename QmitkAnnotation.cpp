@@ -300,7 +300,7 @@ QmitkAnnotation::QmitkAnnotation(QObject* parent)
 {
    CreateConnections();
    m_pRenderer = vtkRenderer::New();
-   m_pRenderer->SetBackground(0.20, 0.27 ,0.32);
+   m_pRenderer->SetBackground(0.0, 0.0 ,0.0);
    m_pRenWin = RenderWindow->GetRenderer()->GetRenderWindow();
    m_pRenWin->AddRenderer(m_pRenderer); 
    picker  = vtkCellPicker::New();
@@ -1560,7 +1560,9 @@ void QmitkAnnotation::DisplayVesselTree(std::vector<Vertex> vs,std::vector<Edge>
 	vtkActor *treeActor = vtkActor::New();
 	treeActor->PickableOff();
 	treeActor->SetMapper(treeMapper);
-	treeActor->GetProperty()->SetColor(1.0,1.0,1.0);
+	color = m_RainbowColor.GetNextColor();
+	treeActor->GetProperty()->SetColor(color.GetRed(),color.GetGreen(),color.GetBlue());
+	addActorNode(treeActor,"Vascular Tree",color);
 
 	vtkSphereSource *sphere = vtkSphereSource::New();
 	sphere->SetRadius(0.70);
@@ -1580,15 +1582,19 @@ void QmitkAnnotation::DisplayVesselTree(std::vector<Vertex> vs,std::vector<Edge>
 	cubeActor->SetMapper(sphereMapper);
 	cubeActor->GetProperty()->SetColor(0.0,1.0,0.0);
 	cubeActor->PickableOff();
+	color.SetRed(0.0);color.SetGreen(1.0);color.SetBlue(0.0);
+	addActorNode(cubeActor,"Vascular Tree Cube",color);
 
-	vtkDataSetMapper *verMapper = vtkDataSetMapper::New();
+	/*vtkDataSetMapper *verMapper = vtkDataSetMapper::New();
 	verMapper->SetInput(grid);
 	vtkActor *verActor = vtkActor::New();
 	verActor->SetMapper(verMapper);
 	verActor->GetProperty()->SetColor(0.0,1.0,1.0);
+	color.SetRed(0.0);color.SetGreen(1.0);color.SetBlue(1.0);
+	addActorNode(verActor,"Vascular Tree Vertex",color);*/
 
 	m_pRenderer->AddActor(treeActor);
-	m_pRenderer->AddActor(verActor);
+	//m_pRenderer->AddActor(verActor);
 	m_pRenderer->AddActor(cubeActor);
 	m_pRenderer->ResetCamera();
 	mitk::RenderingManager::GetInstance()->AddRenderWindow(m_pRenWin);
@@ -1624,12 +1630,15 @@ void QmitkAnnotation::DoDisplayVesselTree()
 	/*
 	Function code of DisplayVesselTree.
 	*/
+	DisplayVesselTree(vesselGraph->vs,vesselGraph->es);
 	vesselGraph->RadiusFilter(2.30);
 	DisplayVesselTree(vesselGraph->vs,vesselGraph->es);
 	
-	vesselGraph->KMeans(8,0.5);
-	DisplaySubtreeNodes();
+	vesselGraph->SetVertexOrder();
 
+	m_RainbowColor.GoToBegin();
+	std::cout << "Variance : " << vesselGraph->KMeans(segExp,0.1) << std::endl;
+	DisplaySubtreeNodes();
 
 	m_btnNewSubTree->setEnabled(true);
 	m_btnDisplayVesselTree->setEnabled(false);
@@ -1686,7 +1695,6 @@ void QmitkAnnotation::CreateNewSubTree()
 		m_btnNewSubTree->setEnabled(false);
 		m_btnDivideTree->setEnabled(true);
 	}
-	
 }
 
 void QmitkAnnotation::itemSelected(QListViewItem* item)
@@ -1713,7 +1721,6 @@ void QmitkAnnotation::itemSelected(QListViewItem* item)
 			m_pRenWin->Render();
 		}
 	}
-	
 }
 
 void QmitkAnnotation::actorItemSelected(QListViewItem* item)
@@ -1897,8 +1904,6 @@ void QmitkAnnotation::AutomaticLiverSegment()
 				m_pRenWin->Render();
 			}
 		}
-
-		
 	}
 	else
 	{
@@ -1979,7 +1984,7 @@ void QmitkAnnotation::ManualLiverSegment()
 				mapper->SetInput(pSurface->GetVtkPolyData());
 				vtkActor *actor = vtkActor::New();
 				actor->SetMapper(mapper);
-				mitk::Color color =  m_RainbowColor.GetNextColor();
+				color =  m_RainbowColor.GetNextColor();
 				actor->GetProperty()->SetColor(color.GetRed(),color.GetGreen(),color.GetBlue());
 				m_pRenderer->AddActor(actor);
 				actor->VisibilityOff();
@@ -1990,12 +1995,16 @@ void QmitkAnnotation::ManualLiverSegment()
 
 				QString str;
 				str.sprintf("%d Segment",index+1);
+				addActorNode(actor,str,color);
+
+				/*
 				QCheckListItem *actorItem = new QCheckListItem(listView->firstChild(),str);
 				QPixmap pixmap(12,8);
 				pixmap.fill(QColor(color.GetRed()*255,color.GetGreen()*255,color.GetBlue()*255));
 				actorItem->setPixmap(0,pixmap);
 				actorItem->setEnabled(true);
 				actorMap.insert(std::make_pair(actorItem,actor));
+				*/
 
 			}
 
@@ -2008,8 +2017,6 @@ void QmitkAnnotation::ManualLiverSegment()
 			tr("Sorry,No label result image to Surface."),tr(""),
 			QMessageBox::Ok,  QMessageBox::NoButton,  QMessageBox::NoButton );
 	}
-
-	
 }
 
 template <typename TPixel, unsigned int VImageDimension>
@@ -2154,7 +2161,7 @@ void QmitkAnnotation::DisplaySubtreeNodes()
 		sprintf(name,"No.%d SubGraph",i);
 		pNode->SetProperty("name", mitk::StringProperty::New(name));
 		pNode->SetProperty("layer", mitk::IntProperty::New(1));
-		if (vesselGraph->subGraphCount%8==0)
+		if (i%8==0)
 		{
 			m_RainbowColor.GoToBegin();
 		}
@@ -2164,4 +2171,14 @@ void QmitkAnnotation::DisplaySubtreeNodes()
 		mitk::DataStorage::GetInstance()->Add( pNode );
 		mitk::RenderingManager::GetInstance()->RequestUpdateAll();
 	}
+}
+
+void QmitkAnnotation::addActorNode(vtkActor *actor,QString str,mitk::Color color)
+{
+	QCheckListItem *actorItem = new QCheckListItem(listView->firstChild(),str);
+	QPixmap pixmap(12,8);
+	pixmap.fill(QColor(color.GetRed()*255,color.GetGreen()*255,color.GetBlue()*255));
+	actorItem->setPixmap(0,pixmap);
+	actorItem->setEnabled(true);
+	actorMap.insert(std::make_pair(actorItem,actor));
 }

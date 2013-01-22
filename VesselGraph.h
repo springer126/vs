@@ -93,9 +93,10 @@ class VesselGraph
 public:
 	
 	void ReadFile(const char * Path);
-	unsigned int GetVertexIndex(Vertex v) const ;
-	unsigned int GetEdgeSourceIndex(Edge v) const ;
-	unsigned int GetEdgeTargetIndex(Edge v) const ;
+	int GetVertexIndex(Vertex v) const ;
+	int GetEdgeSourceIndex(Edge v) const ;
+	int GetEdgeTargetIndex(Edge v) const ;
+	int GetOutDegree(const Vertex &) const;
 	void OutputGraph();
 	Vertex GetMaxRadiusEdgeNode();
 	void CreateSubGraph(Vertex& v);
@@ -103,7 +104,7 @@ public:
 	void DivideVesselTree();
 	mitk::Image::Pointer VoxelDivision(mitk::Image *image);
 	void RadiusFilter(double threshold);
-	void KMeans(unsigned int clsNumber,double theta);
+	double KMeans(unsigned int clsNumber,double theta);
 	void SetSeparateArg(double arg)
 	{
 		this->separateArgument = arg;
@@ -122,6 +123,8 @@ public:
 		return this->subGraphCount;
 	}
 	
+	void SetVertexOrder();
+
 	//æ‡¿ÎπÈ¿‡
 	template <typename TPixel, unsigned int VImageDimension>
 	void NNSA(itk::Image<TPixel, VImageDimension> *itkImage,mitk::Image::Pointer *pointer);
@@ -146,7 +149,8 @@ public:
 	VertexMap QDiVertex;
 	std::queue<Vertex> vq;
 	double separateArgument;
-	
+	//map:vertex index and its order
+	std::map<int,int> vertexOrder;
 	TMeanRadius edgeMrMap;
 	TEdgeVisit edgeVisitMap;
 	TXCoord txMap;
