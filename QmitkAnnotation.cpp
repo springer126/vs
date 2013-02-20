@@ -331,9 +331,11 @@ QmitkAnnotation::QmitkAnnotation(QObject* parent)
 
    numOfActors = 0;
 
+   /*
    m_btnNewSubTree->setEnabled(false);
    m_btnDivideTree->setEnabled(false);
    m_btnManuLiverSegment->setEnabled(false);
+   */
    segListView->QListView::addColumn(QString("Segmentation"));
    segListView->setColumnText (0,QString(""));
    //segListView->setColumnText (1,QString("Segmentation"));
@@ -1406,10 +1408,8 @@ void QmitkAnnotation::CaclwithAnnotation()
 
 void QmitkAnnotation::InitDataTree()
 {
-	std::cout << "Init DataTree Selector start..." << std::endl;
 	m_TreeNodeSelector->SetDataTreeNodeIterator(m_DataTreeIteratorBase);
 	//m_TreeNodeSelector->GetFilter()->SetFilter(mitk::IsSegmentNode());
-	std::cout << "Init DataTree Selector over..." << std::endl;
 }
 
 
@@ -1502,7 +1502,7 @@ void QmitkAnnotation::CopyImage(itk::Image<TPixel, VImageDimension> *itkImage, m
 
 
 //use vertex set and edge set to display vascular tree
-void QmitkAnnotation::DisplayVesselTree(std::vector<Vertex> vs,std::vector<Edge> es)
+void QmitkAnnotation::DisplayVesselTree(std::vector<Vertex> vs,std::vector<Edge> es,char *vname,char *ename,bool isSubtree)
 {
 	
 	vtkPoints *points = vtkPoints::New();
@@ -1514,8 +1514,8 @@ void QmitkAnnotation::DisplayVesselTree(std::vector<Vertex> vs,std::vector<Edge>
 	{
 		//pts->InsertPoint(vertexIndexMap[*beg],vesselGraph->txMap[*beg],vesselGraph->tyMap[*beg],vesselGraph->tzMap[*beg]);
 		points->InsertPoint(index,vesselGraph->txMap[vs.at(index)],vesselGraph->tyMap[vs.at(index)],vesselGraph->tzMap[vs.at(index)]);
-		std::cout << index<<" : (" <<vesselGraph->txMap[vs.at(index)]<<","
-			<<vesselGraph->tyMap[vs.at(index)]<<","<<vesselGraph->tzMap[vs.at(index)]<<")"<<std::endl;
+		//std::cout << index<<" : (" <<vesselGraph->txMap[vs.at(index)]<<","
+			//<<vesselGraph->tyMap[vs.at(index)]<<","<<vesselGraph->tzMap[vs.at(index)]<<")"<<std::endl;
 		vtkVertex *vertex = vtkVertex::New();
 		vertex->GetPointIds()->SetId(0,index);
 		scalar->InsertNextValue(1.0);
@@ -1541,7 +1541,7 @@ void QmitkAnnotation::DisplayVesselTree(std::vector<Vertex> vs,std::vector<Edge>
 				tar = i;	
 			}
 		}
-		std::cout << "("<<src<<","<<tar<<")"<<std::endl;
+		//std::cout << "("<<src<<","<<tar<<")"<<std::endl;
 		if(src>=0 && tar>=0)
 		{
 			line->GetPointIds()->SetId(0,src);
@@ -1551,18 +1551,39 @@ void QmitkAnnotation::DisplayVesselTree(std::vector<Vertex> vs,std::vector<Edge>
 	}
 
 	vtkPolyData *treeData = vtkPolyData::New();
+	vtkPolyData *pdata;
 	treeData->SetPoints(points);
 	treeData->SetLines(lines);
-
+	/*
+	if(isSubtree)
+	{
+		vtkExtractEdges *edges = vtkExtractEdges::New(); 
+		edges->SetInput(treeData);
+		edges->Update();
+		vtkTubeFilter *tubes = vtkTubeFilter::New();
+		tubes->SetInputConnection(edges->GetOutputPort());
+		tubes->SetRadius(0.55);
+		tubes->SetNumberOfSides(6);
+		//tubes->UseDefaultNormalOn();
+		//tubes->SetDefaultNormal(.577, .577, .577);
+		tubes->Update();
+		pdata = tubes->GetOutput();
+	}
+	else
+	{
+		pdata = treeData;
+	}
+	*/
+	pdata = treeData;
 	vtkPolyDataMapper *treeMapper = vtkPolyDataMapper::New();
 	treeMapper->ScalarVisibilityOff();
-	treeMapper->SetInput(treeData);
+	treeMapper->SetInput(pdata);
 	vtkActor *treeActor = vtkActor::New();
 	treeActor->PickableOff();
 	treeActor->SetMapper(treeMapper);
 	color = m_RainbowColor.GetNextColor();
 	treeActor->GetProperty()->SetColor(color.GetRed(),color.GetGreen(),color.GetBlue());
-	addActorNode(treeActor,"Vascular Tree",color);
+	addActorNode(treeActor,QString(ename),color);
 
 	vtkSphereSource *sphere = vtkSphereSource::New();
 	sphere->SetRadius(0.70);
@@ -1583,7 +1604,7 @@ void QmitkAnnotation::DisplayVesselTree(std::vector<Vertex> vs,std::vector<Edge>
 	cubeActor->GetProperty()->SetColor(0.0,1.0,0.0);
 	cubeActor->PickableOff();
 	color.SetRed(0.0);color.SetGreen(1.0);color.SetBlue(0.0);
-	addActorNode(cubeActor,"Vascular Tree Cube",color);
+	addActorNode(cubeActor,QString(vname),color);
 
 	/*vtkDataSetMapper *verMapper = vtkDataSetMapper::New();
 	verMapper->SetInput(grid);
@@ -1608,7 +1629,7 @@ void QmitkAnnotation::DisplayVesselTree(std::vector<Vertex> vs,std::vector<Edge>
 
 }
 
-// for automatic vascular branch segemnt
+// for automatic vascular branch segment
 void QmitkAnnotation::DoDisplayVesselTree()
 {
 	std::cout << "DoVesselDivision begin..." << std::endl;;
@@ -1630,19 +1651,31 @@ void QmitkAnnotation::DoDisplayVesselTree()
 	/*
 	Function code of DisplayVesselTree.
 	*/
-	DisplayVesselTree(vesselGraph->vs,vesselGraph->es);
-	vesselGraph->RadiusFilter(2.30);
-	DisplayVesselTree(vesselGraph->vs,vesselGraph->es);
+	DisplayVesselTree(vesselGraph->vs,vesselGraph->es,"origin vascular tree vertex","origin vascular tree",false);
 	
-	vesselGraph->SetVertexOrder();
 
-	m_RainbowColor.GoToBegin();
-	std::cout << "Variance : " << vesselGraph->KMeans(segExp,0.1) << std::endl;
-	DisplaySubtreeNodes();
-
+	//********创建血管树定点actor，以交互式选取子树根节点，对于自动 doesn't matter************//
+	vtkDataSetMapper *verMapper = vtkDataSetMapper::New();
+	verMapper->SetInput(grid);
+	vtkActor *verActor = vtkActor::New();
+	verActor->SetMapper(verMapper);
+	verActor->GetProperty()->SetColor(0.0,1.0,1.0);
+	color.SetRed(0.0);
+	color.SetGreen(1.0);
+	color.SetBlue(1.0);
+	m_pRenderer->AddActor(verActor);
+	m_pRenWin->Render();
+	addActorNode(verActor,QString("origin vascular tree nodes"),color);
+	//****************************************************************************************//
+	
+	
+	
+	
+	/*
 	m_btnNewSubTree->setEnabled(true);
 	m_btnDisplayVesselTree->setEnabled(false);
 	segListView->setEnabled(true);
+	*/
 }
 
 
@@ -1690,7 +1723,7 @@ void QmitkAnnotation::CreateNewSubTree()
 		newItem->setPixmap(0,pixmap);
 		QString name = QString("%1 subtree").arg( index );
 		newItem->setText(1,name);
-		std::cout << segListView->columns()<< std::endl;
+		//std::cout << segListView->columns()<< std::endl;
 
 		m_btnNewSubTree->setEnabled(false);
 		m_btnDivideTree->setEnabled(true);
@@ -1756,6 +1789,7 @@ void QmitkAnnotation::DoVesselDivision()
 		for (int i=0;i<ptlds->GetNumberOfIds();i++)
 		{
 			start = ptlds->GetId(i);
+			std::cout << "test:" <<start << std::endl; 
 		}
 		vesselGraph->SetStartVertex(start);
 		if(!vesselGraph->GetSubGraph())
@@ -1823,6 +1857,128 @@ void QmitkAnnotation::DoVesselDivision()
 
 void QmitkAnnotation::AutomaticLiverSegment()
 {
+	vesselGraph->RadiusFilter(2.30,5);
+	DisplayVesselTree(vesselGraph->rvs,vesselGraph->res,"filter vascular tree vertex","filter vascular tree",false);
+	std::cout << "Variance :" << vesselGraph->KMeans(segExp,0.001)<< std::endl;
+	std::vector<Vertex> vs;
+	std::vector<Edge> es;
+	for (int i=2;i<=vesselGraph->subGraphCount;i++)
+	{
+		std::cout <<"QDiVertex node number:"<< vesselGraph->QDiVertex[i].size()<< std::endl;
+		if((i-2)%7==0)
+			m_RainbowColor.GoToBegin();
+
+		vs.clear();
+		es.clear();
+		for (std::list<Vertex>::iterator begin = vesselGraph->QDiVertex[i].begin();begin!=vesselGraph->QDiVertex[i].end();begin++)
+		{
+			vs.push_back(*begin);
+		}
+		for (std::list<Edge>::iterator begin2 = vesselGraph->QDiEdge[i].begin();begin2!=vesselGraph->QDiEdge[i].end();begin2++)
+		{
+			es.push_back(*begin2);
+		}
+		char buf[20];
+		char buf2[20];
+		sprintf(buf,"%d subtree vertex",i-1);
+		sprintf(buf2,"%d subtree",i-1);
+		DisplayVesselTree(vs,es,buf,buf2,true);
+		//std::cout << "Rendering " << i << "subtree" << std::endl;
+	}
+
+	vesselGraph->SetVertexOrder();
+
+	m_RainbowColor.GoToBegin();
+	//std::cout << "Variance : " << vesselGraph->KMeans(segExp,0.1) << std::endl;
+	DisplaySubtreeNodes();
+	mitk::Image* image;
+	mitk::Image::Pointer resultImage,temp;
+	QListViewItemIterator it(m_pInstance->listView);
+	it++;
+	while (it.current()) 
+	{
+		DataTreeViewItem *item = (DataTreeViewItem *)it.current();
+		if (item->isOn())
+		{
+			std::cout<<item->text(0)<<std::endl;
+			image = dynamic_cast<mitk::Image*> (item->GetDataTreeNode()->GetData());
+			if (image)
+			{
+				if(vesselGraph)
+				{	
+					resultImage = vesselGraph->VoxelDivision(image);
+					AccessByItk_1(resultImage, SeparateLabelImage, &temp);
+				}
+				else
+				{	
+					QMessageBox::warning ( NULL,
+						tr("Warning!"),tr("No Vessel-Graph "),
+						QMessageBox::Ok,  QMessageBox::NoButton,  QMessageBox::NoButton );
+				}
+			}
+			break;
+		}
+		it++;
+	}
+
+	mitk::LabeledImageToSurfaceFilter::Pointer filter = mitk::LabeledImageToSurfaceFilter::New();
+	if (filter.IsNull())
+	{
+		std::cout<<"[FAILED]"<<std::endl;
+		return;
+	}
+	if (resultImage.IsNotNull())
+	{
+		filter->SetInput(resultImage);
+		filter->GenerateAllLabelsOn();
+		filter->SetGaussianStandardDeviation( 1.5 ); 
+		filter->SetSmooth(true);
+		filter->SetDecimate( mitk::ImageToSurfaceFilter::DecimatePro );
+		filter->SetTargetReduction( 0.2 );
+		filter->SetBackgroundLabel(-10000);
+		filter->Update();
+
+		int numOfSurfaces = filter->GetNumberOfOutputs();
+		//std::cout << numOfSurfaces <<std::endl;
+		mitk::ColorSequenceRainbow m_RainbowColor;
+		if (numOfSurfaces>=1)
+		{
+			for (int index=0;index<numOfSurfaces;index++)
+			{
+				if (index%8==0)
+				{
+					m_RainbowColor.GoToBegin();
+				}
+				mitk::Surface::Pointer pSurface = filter->GetOutput(index);
+				vtkPolyDataMapper *mapper = vtkPolyDataMapper::New();
+				mapper->ScalarVisibilityOff();
+				mapper->SetInput(pSurface->GetVtkPolyData());
+				vtkActor *actor = vtkActor::New();
+				actor->SetMapper(mapper);
+				mitk::Color color =  m_RainbowColor.GetNextColor();
+				actor->GetProperty()->SetColor(color.GetRed(),color.GetGreen(),color.GetBlue());
+				m_pRenderer->AddActor(actor);
+				m_pRenderer->ResetCamera();
+				mitk::RenderingManager::GetInstance()->AddRenderWindow(m_pRenWin);
+				m_pRenWin->Render();
+				QString str;
+				str.sprintf("%d segment",index+1);
+				addActorNode(actor,str,color);
+			}
+		}
+	}
+	else
+	{
+		QMessageBox::warning ( NULL,
+			tr("[FAILED]"),tr("No label result image to Surface"),
+			QMessageBox::Ok,  QMessageBox::NoButton,  QMessageBox::NoButton );
+	}
+
+
+
+	//old _version: 固定分割比例划分子树，deprecated！
+	/*
+	
 	if(!vesselGraph)
 	    vesselGraph = new VesselGraph("D:\\VesseltreeGraph.xml");
 	double arg = atof(radiusRatio->text());
@@ -1912,6 +2068,8 @@ void QmitkAnnotation::AutomaticLiverSegment()
 			QMessageBox::Ok,  QMessageBox::NoButton,  QMessageBox::NoButton );
 	}
 
+
+	*/
 }
 
 void QmitkAnnotation::ManualLiverSegment()
@@ -1964,7 +2122,7 @@ void QmitkAnnotation::ManualLiverSegment()
 		filter->Update();
 
 		int numOfSurfaces = filter->GetNumberOfOutputs();
-		std::cout << numOfSurfaces <<std::endl;
+		//std::cout << numOfSurfaces <<std::endl;
 		mitk::ColorSequenceRainbow m_RainbowColor;
 		m_RainbowColor.GoToBegin();
 		if (numOfSurfaces==vesselGraph->GetSubGraphCount()-1)
@@ -1972,7 +2130,7 @@ void QmitkAnnotation::ManualLiverSegment()
 			for (int index=0;index<numOfSurfaces;index++)
 			{
 				mitk::LabeledImageToSurfaceFilter::LabelType label = filter->GetLabelForNthOutput(index);
-				std::cout << (label/10)-1 << std::endl;
+				//std::cout << (label/10)-1 << std::endl;
 				
 				if (index%7==0)
 				{
@@ -2139,6 +2297,7 @@ void QmitkAnnotation::EnableVisible()
 	m_pRenWin->Render();
 }
 
+//显示QDiVertex[2-subGraphCount]每个子树分支
 void QmitkAnnotation::DisplaySubtreeNodes()
 {
 	assert(vesselGraph!=NULL && vesselGraph->subGraphCount>1);

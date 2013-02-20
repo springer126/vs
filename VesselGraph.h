@@ -89,13 +89,16 @@ typedef boost::graph_traits<Graph>::in_edge_iterator InEdgeIterator;
 
 class VesselGraph
 {
+	friend class QmitkAnnotation;
+
 	typedef std::map<int , std::list<Vertex> > VertexMap;
+	typedef std::map<int,std::list<Edge> > EdgeMap;
 public:
-	
+
 	void ReadFile(const char * Path);
 	int GetVertexIndex(Vertex v) const ;
-	int GetEdgeSourceIndex(Edge v) const ;
-	int GetEdgeTargetIndex(Edge v) const ;
+	int GetEdgeSourceIndex(Edge e) const ;
+	int GetEdgeTargetIndex(Edge e) const ;
 	int GetOutDegree(const Vertex &) const;
 	void OutputGraph();
 	Vertex GetMaxRadiusEdgeNode();
@@ -103,8 +106,9 @@ public:
 	bool GetSubGraph();
 	void DivideVesselTree();
 	mitk::Image::Pointer VoxelDivision(mitk::Image *image);
-	void RadiusFilter(double threshold);
+	void RadiusFilter(double lowRadius,int lowNodes);
 	double KMeans(unsigned int clsNumber,double theta);
+
 	void SetSeparateArg(double arg)
 	{
 		this->separateArgument = arg;
@@ -113,6 +117,8 @@ public:
 	{
 		this->start = start;
 	}
+
+
 	void SetSubGraphCount(int arg)
 	{
 		this->subGraphCount = arg;
@@ -122,7 +128,7 @@ public:
 	{
 		return this->subGraphCount;
 	}
-	
+
 	void SetVertexOrder();
 
 	//距离归类
@@ -136,17 +142,21 @@ public:
 	void Reset();
 	VesselGraph(const char * Path);
 	~VesselGraph();
-public:
+private:
 	Graph g;
 	std::vector<Vertex> vs;
 	std::vector<Edge> es;
 
+	std::vector<Vertex> rvs;
+	std::vector<Edge> res;
+
 	int subGraphCount;
 	int start;
-	
+
 	//QDiVertex[2-subGraphCount]存放各个分支节点集合,QDivVertex[1]存放一级分支
 	//交互式选定分支时，起始的二级分支为QDivVertex[2]
 	VertexMap QDiVertex;
+	EdgeMap QDiEdge;
 	std::queue<Vertex> vq;
 	double separateArgument;
 	//map:vertex index and its order

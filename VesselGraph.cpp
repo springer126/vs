@@ -80,7 +80,7 @@ struct exercise_vertex
 	}
 };
 
-VesselGraph::VesselGraph(const char * Path):g(0),subGraphCount(0),separateArgument(0.6)
+VesselGraph::VesselGraph(const char * Path):g(0),subGraphCount(0),separateArgument(0.6),start(-1)
 {
 	ReadFile(Path);
 	edgeMrMap = get(edge_meanradius_t(),g);
@@ -98,7 +98,7 @@ VesselGraph::VesselGraph(const char * Path):g(0),subGraphCount(0),separateArgume
 
 VesselGraph::~VesselGraph()
 {
-
+	
 }
 
 void VesselGraph::ReadFile(const char * Path)
@@ -138,6 +138,7 @@ Vertex VesselGraph::GetMaxRadiusEdgeNode()
 {
 	assert(num_vertices(g)!=0);
 	assert(num_edges(g)!=0);
+
 	TVertexIndex vertexIndexMap = get(vertex_index,g);
 	EdgeIterator e_i,e_end;
 	Edge e;
@@ -153,6 +154,7 @@ Vertex VesselGraph::GetMaxRadiusEdgeNode()
 	//return source(e,g);
 }
 
+//???????????????,?????????????????separateArgument?,???????push?vq?????
 void VesselGraph::CreateSubGraph(Vertex& v)
 {
 	assert(num_vertices(g)!=0);
@@ -261,6 +263,9 @@ void VesselGraph::CreateSubGraph(Vertex& v)
 bool VesselGraph::GetSubGraph()
 {
 	//Reset();
+	if(start==-1)
+		return false;
+
 	Vertex v = vs.at(start);
 	std::cout << txMap[v]<<","<<tyMap[v]<<","<<tzMap[v]<<std::endl;
 	++subGraphCount;
@@ -282,7 +287,7 @@ bool VesselGraph::GetSubGraph()
 			vq.push(v);
 		}
 	}
-	
+	start = -1;
 	if(QDiVertex[subGraphCount].size()<=1)
 	{
 		QDiVertex[subGraphCount].clear();
@@ -290,20 +295,25 @@ bool VesselGraph::GetSubGraph()
 		std::cout << "[Deprecated:1 point.]" <<std::endl;
 		return false;
 	}
-
-	std::cout << "SubGraph: "<<subGraphCount;
-	std::cout <<" Vertex Numbers: "<< QDiVertex[subGraphCount].size()<<std::endl;
-	std::list<Vertex>::iterator begin;
-	TVertexIndex index = get(vertex_index, g);
-	for (begin = QDiVertex[subGraphCount].begin();begin!=QDiVertex[subGraphCount].end();begin++)
+	else
 	{
-		std::cout << index[*begin]<<" ";
-	}
-	std::cout << std::endl;
+		std::cout << "SubGraph: "<<subGraphCount;
+		std::cout <<" Vertex Numbers: "<< QDiVertex[subGraphCount].size()<<std::endl;
+		std::list<Vertex>::iterator begin;
+		TVertexIndex index = get(vertex_index, g);
+		for (begin = QDiVertex[subGraphCount].begin();begin!=QDiVertex[subGraphCount].end();begin++)
+		{
+			std::cout << index[*begin]<<" ";
+		}
+		std::cout << std::endl;
 
-	return true;
+		return true;
+	}
+	
 }
 
+
+// ?separateArgument????????
 void VesselGraph::DivideVesselTree()
 {
 	vq.push(this->GetMaxRadiusEdgeNode());
@@ -319,8 +329,13 @@ mitk::Image::Pointer VesselGraph::VoxelDivision(mitk::Image *image)
 {
 	mitk::Image::Pointer resultImage;
 	//std::cout << image->GetPixelType().GetItkTypeAsString() << std::endl;
-	AccessByItk_1(image,NNSA,&resultImage);
-	return resultImage;
+	if(subGraphCount<2 || image==NULL)
+		return NULL;
+	else
+	{
+		AccessByItk_1(image,NNSA,&resultImage);
+		return resultImage;
+	}
 }
 
 void VesselGraph::Reset()
@@ -332,7 +347,16 @@ void VesselGraph::Reset()
 			QDiVertex[i].clear();		
 		}
 	}*/
+	if(subGraphCount>=2)
+	{
+		for (int i=1;i<=subGraphCount;i++)
+		{
+			QDiVertex[i].clear();
+			QDiEdge[i].clear();
+		}
+	}
 	QDiVertex.clear();
+	QDiEdge.clear();
 	subGraphCount = 0;
 }
 
@@ -406,7 +430,7 @@ void VesselGraph::NNSA(itk::Image<TPixel, VImageDimension> *itkImage,mitk::Image
 				clsId = i;
 			}
 		}
-		//Ã¿¶Î8¶ÎÌåËØÖµ£º20-90
+		//??8????:20-90
 		iterator2.Set((TPixel)clsId*10);
 		//iterator2.Set(100);
 	}
@@ -564,6 +588,8 @@ int VesselGraph::GetVertexIndex(Vertex v) const
 	return vertexIndexMap[v];
 }
 
+
+
 int VesselGraph::GetEdgeSourceIndex(Edge e) const 
 {
 	 return GetVertexIndex(source(e,g));
@@ -574,58 +600,175 @@ int VesselGraph::GetEdgeTargetIndex(Edge e) const
 	return GetVertexIndex(target(e,g));
 }
 
-void VesselGraph::RadiusFilter(double threshold)
+void VesselGraph::RadiusFilter(double lowRadius,int lowNodes)
 {
 	assert((vs.size()>0));
 	assert((es.size()>0));
 	TVertexIndex vertexIndexMap = get(vertex_index,g);
-	std::vector<Edge>::iterator i_beg;
-	std::vector<Vertex>::iterator i_beg2;
+	std::vector<Edge>::iterator e_beg;
+	std::vector<Vertex>::iterator v_beg,beg;
 	QDiVertex[1].clear();
 	//erase edge whose radius more than threshold and its source vertex
-	for (i_beg = es.begin();i_beg!=es.end();i_beg++)
+	//if sink point is leaf then delete it
+	for (e_beg = es.begin();e_beg!=es.end();e_beg++)
 	{
-		if(edgeMrMap[*i_beg]>threshold)
+		if(edgeMrMap[*e_beg]<lowRadius)
 		{
-			for (i_beg2 = vs.begin();i_beg2!=vs.end();i_beg2++)
+			res.push_back(*e_beg);
+		}
+	}
+
+	for (e_beg = res.begin();e_beg!=res.end();e_beg++)
+	{
+		for (v_beg = rvs.begin();v_beg!=rvs.end() && vertexIndexMap[*v_beg] !=source(*e_beg,g);v_beg++);
+		if(v_beg==rvs.end())
+		{
+			for (beg = vs.begin();beg!=vs.end();beg++)
 			{
-				if(vertexIndexMap[*i_beg2] ==source(*i_beg,g))
+				if(vertexIndexMap[*beg]==source(*e_beg,g))
 				{
-					QDiVertex[1].push_back(*i_beg2);
-					vs.erase(i_beg2);
+					rvs.push_back(*beg);
 					break;
 				}
 			}
-			es.erase(i_beg);
 		}
-	}
 
-
-	//erase isolate vertex
-	/*
-	for (i_beg2 = vs.begin();i_beg2!=vs.end();i_beg2++)
-	{
-		InEdgeIterator in_iter_beg,in_iter_end;
-
-		for(boost::tie(in_iter_beg,in_iter_end) = in_edges((*i_beg2,g)),in_iter_beg!=in_iter_end;in_iter_beg++)
+		for (v_beg = rvs.begin();v_beg!=rvs.end() && vertexIndexMap[*v_beg] !=target(*e_beg,g);v_beg++);
+		if(v_beg==rvs.end())
 		{
-			for (i_beg = es.begin();i_beg!=es.end();i_beg++)
+			for (beg = vs.begin();beg!=vs.end();beg++)
 			{
-				if()
+				if(vertexIndexMap[*beg]==target(*e_beg,g))
+				{
+					rvs.push_back(*beg);
+					break;
+				}
 			}
-		} 
-		if(in_edges(*i_beg2,g).first == in_edges(*i_beg2,g).second && 
-			out_edges(*i_beg2,g).first == out_edges(*i_beg2,g).second)
-		{
-			std::cout << "Erase a Vertex." << std::endl;
-			vs.erase(i_beg2);
 		}
 	}
-	*/
-	
 
-	std::cout <<"Vertex Number :" << vs.size()<<" , Edge Number:" << es.size() << std::endl;
-	ofstream out_file("D:\\vertex.scale",fstream::app);
+
+	/*for (v_beg = rvs.begin();v_beg!=rvs.end();v_beg++)
+	{
+		for (e_beg = es.begin();e_beg!=es.end();e_beg++)
+		{
+			if(target(*e_beg,g)==vertexIndexMap[*v_beg] && find(res.begin(),res.end(),*e_beg)==res.end())
+			{
+				
+			}
+		}
+	}*/
+
+	std::cout <<"Steps 1: Vertex Number :" << rvs.size()<<" , Edge Number:" << res.size() << std::endl;
+	vs.clear();
+
+	mitk::Point3D point3D;
+	mitk::PointSet::Pointer roots = mitk::PointSet::New();
+	int index = 0;
+	for (v_beg = rvs.begin();v_beg!=rvs.end();v_beg++)
+	{
+		for (e_beg = es.begin();e_beg!=es.end();e_beg++)
+		{	
+			std::vector<Vertex>::iterator v_iter;
+			std::vector<Edge>::iterator e_iter;
+			
+			//??*v_beg ??????
+			if(target(*e_beg,g)==vertexIndexMap[*v_beg] && find(res.begin(),res.end(),*e_beg)==res.end())
+			{
+				int numOfVertexs = 0;
+				AdjacencyIterator ad_i,ad_end;
+	
+				while (!vq.empty())
+				{
+					vq.pop();
+				}
+				vq.push(*v_beg);
+				while(!vq.empty())
+				{
+					++numOfVertexs;
+					Vertex v = vq.front();
+					vq.pop();
+					for(tie(ad_i,ad_end) = adjacent_vertices(v,g);ad_i!=ad_end;ad_i++)
+					{
+						for (e_iter = res.begin();e_iter!=res.end();e_iter++)
+						{
+							if(GetEdgeTargetIndex(*e_iter)==vertexIndexMap[*ad_i] && GetEdgeSourceIndex(*e_iter)==vertexIndexMap[v])
+								vq.push(*ad_i);
+						}
+						
+					}
+				}
+				
+				std::cout << "Index:"<<vertexIndexMap[*v_beg] << " , Number Of Nodes:" << numOfVertexs<<std::endl;
+				//?????????lowNodes,????????(???)
+				if(numOfVertexs>lowNodes)
+				{
+					vs.push_back(*v_beg);
+					point3D[0] = txMap[*v_beg];point3D[1] = tyMap[*v_beg];point3D[2] = tzMap[*v_beg];
+					roots->GetPointSet()->GetPoints()->InsertElement( index++, point3D );
+				}
+				else//??,?res?rvs??????
+				{
+					while (!vq.empty())
+					{
+						vq.pop();
+					}
+					vq.push(*v_beg);
+					while(!vq.empty())
+					{
+						
+						Vertex v = vq.front();
+						for (v_iter = rvs.begin();v_iter!=rvs.end();v_iter++)
+						{
+							if(vertexIndexMap[*v_iter]==vertexIndexMap[v])
+							{
+								rvs.erase(v_iter);
+								break;
+							}
+						}
+
+						vq.pop();
+						for(tie(ad_i,ad_end) = adjacent_vertices(v,g);ad_i!=ad_end;ad_i++)
+						{
+							for (e_iter = res.begin();e_iter!=res.end();e_iter++)
+							{
+								if(GetEdgeTargetIndex(*e_iter)==vertexIndexMap[*ad_i] && GetEdgeSourceIndex(*e_iter)==vertexIndexMap[v])
+									vq.push(*ad_i);
+							}
+						}
+						
+						for (e_iter = res.begin();e_iter!=res.end();e_iter++)
+						{
+							if(GetEdgeSourceIndex(*e_iter)==vertexIndexMap[v])
+							{
+								res.erase(e_iter);
+							}
+						}
+
+					}
+				}
+				
+			}
+		}
+	}
+
+	std::cout <<"Steps 2: Vertex Number :" << rvs.size()<<" , Edge Number:" << res.size() << std::endl;
+
+	mitk::DataTreeNode::Pointer pNode = mitk::DataTreeNode::New();
+	pNode->SetData( roots );
+	char name[20];
+	sprintf(name,"%d subtree",index);
+	pNode->SetProperty("name", mitk::StringProperty::New(name));
+	pNode->SetProperty("layer", mitk::IntProperty::New(1));
+	pNode->SetProperty("color", mitk::ColorProperty::New(1.0,0.0,0.0));
+	pNode->SetProperty("pointsize", mitk::FloatProperty::New(2));
+	mitk::DataStorage::GetInstance()->Add( pNode );
+	mitk::RenderingManager::GetInstance()->RequestUpdateAll();
+
+
+
+
+	/*ofstream out_file("D:\\vertex.scale",fstream::app);
 	for (i_beg2 = vs.begin();i_beg2!=vs.end();i_beg2++)
 	{
 		out_file << txMap[*i_beg2]<<","<<tyMap[*i_beg2]<< "," << tzMap[*i_beg2]<<std::endl;
@@ -634,14 +777,17 @@ void VesselGraph::RadiusFilter(double threshold)
 	for (i_beg = es.begin();i_beg!=es.end();i_beg++)
 	{
 		std::cout << "("<<source(*i_beg,g)<<","<<target(*i_beg,g)<<")"<<std::endl;
-	}
+	}*/
 }
 
-// K-means to classify nodes of vascular
+/************************************************************************/
+/*   K-means to classify nodes of vascular  
+	 Option: subtree roots || subtree all-nodes
+/************************************************************************/
 double VesselGraph::KMeans(unsigned int clsNumber,double theta)
 {
 	assert(clsNumber>0 && theta>0);
-	
+	assert(vs.size()>0);
 	int size = vs.size();
 	//find seeds
 	Vertex *seeds = new Vertex[clsNumber];
@@ -721,8 +867,8 @@ double VesselGraph::KMeans(unsigned int clsNumber,double theta)
 		*(*(centerPosition+k)+2) = ratio*(scope[2][0]-scope[2][1])+scope[2][1];
 	}*/
 	
-	double ratio[8][3] = {1/4.0,1/4.0,1/4.0, 1/4.0,3/4.0,1/4.0, 3/4.0,1/4.0,1/4.0, 3/4.0,3/4.0,1/4.0,
-				1/4.0,1/4.0,3/4.0, 3/4.0,1/4.0,3/4.0,1/4.0,3/4.0,3/4.0, 3/4.0,3/4.0,3/4.0};
+	//double ratio[8][3] = {1/4.0,1/4.0,1/4.0, 1/4.0,3/4.0,1/4.0, 3/4.0,1/4.0,1/4.0, 3/4.0,3/4.0,1/4.0,
+		//		1/4.0,1/4.0,3/4.0, 3/4.0,1/4.0,3/4.0,1/4.0,3/4.0,3/4.0, 3/4.0,3/4.0,3/4.0};
 	
 	//for (int i=0;i<clsNumber;i++)
 	//{
@@ -741,7 +887,9 @@ double VesselGraph::KMeans(unsigned int clsNumber,double theta)
 	
 	double thresh = 10;
 	int number = 0;
-	
+	/************************************************************************/
+	/* ??clsNumber?????                                                                     */
+	/************************************************************************/
 	mitk::Point3D point3D;
 	mitk::PointSet::Pointer OriginSeeds = mitk::PointSet::New();
 	for (int i = 0;i<clsNumber;i++)
@@ -842,6 +990,8 @@ double VesselGraph::KMeans(unsigned int clsNumber,double theta)
 			QDiVertex[i].clear();
 		}
 	}
+
+
 	subGraphCount = 1;
 	sum = 0;
 	for (int i = 0;i<clsNumber;i++)
@@ -863,6 +1013,52 @@ double VesselGraph::KMeans(unsigned int clsNumber,double theta)
 			
 		}
 	}
+	
+
+	/************************************************************************/
+	/*???????????,?????????QDiVertex?,????????                                                                      */
+	/************************************************************************/
+	std::list<Vertex>::iterator i_beg2;
+	std::vector<Edge>::iterator e_iter;
+	AdjacencyIterator ad_i,ad_end;
+	TVertexIndex vertexIndexMap = get(vertex_index,g);
+	for (int i=2;i<=subGraphCount;i++)
+	{
+		while (!vq.empty())
+		{
+			vq.pop();
+		}
+		std::cout << i-1<<" subtree set root number:" << QDiVertex[i].size();
+		for (i_beg2 = QDiVertex[i].begin();i_beg2!=QDiVertex[i].end();i_beg2++)
+		{
+			vq.push(*i_beg2);
+		}
+		QDiVertex[i].clear();
+		while (!vq.empty())
+		{
+			Vertex v = vq.front();
+			vq.pop();
+			QDiVertex[i].push_back(v);
+			for(tie(ad_i,ad_end) = adjacent_vertices(v,g);ad_i!=ad_end;ad_i++)
+			{
+				for (e_iter = res.begin();e_iter!=res.end();e_iter++)
+				{
+					if(GetEdgeTargetIndex(*e_iter)==vertexIndexMap[*ad_i] && GetEdgeSourceIndex(*e_iter)==vertexIndexMap[v])
+					{
+						vq.push(*ad_i);
+						QDiEdge[i].push_back(*e_iter);
+					}
+				}
+			}
+		}
+		std::cout <<" , " << QDiVertex[i].size()<< std::endl;
+		
+	}
+	/************************************************************************/
+	/*                                                                      */
+	/************************************************************************/
+	
+
 	
 	sum = sqrt(sum);
 
@@ -895,6 +1091,8 @@ int VesselGraph::GetOutDegree(const Vertex &v) const
 //set vertex order using strahler number
 void VesselGraph::SetVertexOrder()
 {
+	assert(g!=NULL);
+	
 	if(vertexOrder.size()!=0)
 		vertexOrder.clear();
 	
@@ -947,10 +1145,11 @@ void VesselGraph::SetVertexOrder()
 
 	}
 
-
+	/*
 	for (boost::tie(v_beg,v_end) = vertices(g);v_beg!=v_end;v_beg++)
 	{
 		std::cout <<"Index: " <<vertexIndexMap[*v_beg]<<" , "<<vertexOrder[*v_beg]<<std::endl;
 	}
+	*/
 	
 }

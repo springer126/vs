@@ -45,19 +45,19 @@ public:
 	vtkRenderer*    m_pRenderer;
 	vtkRenderWindow* m_pRenWin; 
 	//vtkRenderWindowInteractor *m_interactor;
-	
-	
+
+
 	static QmitkAnnotation* Instance(QObject* parent, mitk::DataTreeIteratorBase* iterator = NULL, mitk::DataTreeNode* SelectedNode = NULL);
 	static void Destroy();
-   //Constructor
-   QmitkAnnotation(QObject* parent);
+	//Constructor
+	QmitkAnnotation(QObject* parent);
 
-   //Destructor
-   ~QmitkAnnotation();
+	//Destructor
+	~QmitkAnnotation();
 
 
-   /*!     \brief method for creating the connections of main and control widget     */     
-   virtual void CreateConnections();
+	/*!     \brief method for creating the connections of main and control widget     */     
+	virtual void CreateConnections();
 
 private:
 	mitk::DataTreeNode* SelectedNode;
@@ -105,14 +105,14 @@ protected:
 	double opacityValue;
 	char* clipPolyData;
 	char* clipImageData;
-	
+
 	int numOfActors;
 
 	//for cacl  information of segment
 	mitk::DataTreeIteratorBase *m_DataTreeIteratorBase;
 	mitk::DataTreeIteratorClone selectedImage;
 	mitk::DataTreeNode::ConstPointer m_Node;
-	
+
 	mitk::ColorSequenceRainbow m_RainbowColor;
 	mitk::Color color;
 
@@ -123,48 +123,48 @@ protected:
 	void InitDataTree();
 	void setNode(vtkPolyData *polydata,mitk::DataTreeNode *parent,char *nodeName);
 	void addImageNode(mitk::Image *imagedata,mitk::DataTreeNode *parent,char *nodeName);
-	
+
 	template <typename TPixel, unsigned int VImageDimension>
 	long VoxelNumberOfImage(itk::Image<TPixel, VImageDimension> *itkImage, long &param1, long &param2);
 
 	void activeActorProperty(bool);
 
-	void DisplayVesselTree(std::vector<Vertex> vs,std::vector<Edge> es);
+	void DisplayVesselTree(std::vector<Vertex> vs,std::vector<Edge> es,char *vname,char *ename,bool isSubtree);
 	void DisplaySubtreeNodes();
-protected slots:  
+	protected slots:  
 
-   void RenderButtonClicked();
+		void RenderButtonClicked();
 
-   void SetActorColor();
+		void SetActorColor();
 
-   void HighlightButtonClicked();
-   void setOpacity();
-   void EnableInterpolation();
-   void EnableAxes();
-   void SegmentByMiddleHepaticVein();
-   void SegmentByLeftHepaticVein();
-   void SegmentByRightHepaticVein();
-   void SegmentByPortalVein();
-   void SegmentISeg();
-   void Clip();
-   void SetDataNodeChecked(DataTreeViewItem*, bool);
+		void HighlightButtonClicked();
+		void setOpacity();
+		void EnableInterpolation();
+		void EnableAxes();
+		void SegmentByMiddleHepaticVein();
+		void SegmentByLeftHepaticVein();
+		void SegmentByRightHepaticVein();
+		void SegmentByPortalVein();
+		void SegmentISeg();
+		void Clip();
+		void SetDataNodeChecked(DataTreeViewItem*, bool);
 
-   void CaclwithAnnotation();
-   
-   void DoDisplayVesselTree();
-   void DoVesselDivision();
-   void AutomaticLiverSegment();
-   void ManualLiverSegment();
-   void CreateNewSubTree();
-   void TreeChanged();
-   void itemSelected(QListViewItem*);
-   void actorItemSelected(QListViewItem  *);
-   void ImageSelected(mitk::DataTreeIteratorClone imageIt);
+		void CaclwithAnnotation();
 
-   void EnableVisible();
+		void DoDisplayVesselTree();
+		void DoVesselDivision();
+		void AutomaticLiverSegment();
+		void ManualLiverSegment();
+		void CreateNewSubTree();
+		void TreeChanged();
+		void itemSelected(QListViewItem*);
+		void actorItemSelected(QListViewItem  *);
+		void ImageSelected(mitk::DataTreeIteratorClone imageIt);
 
-   void addActorNode(vtkActor *actor,QString str,mitk::Color color);
+		void EnableVisible();
 
-   
+		void addActorNode(vtkActor *actor,QString str,mitk::Color color);
+
+
 };
 #endif 
